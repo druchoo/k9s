@@ -37,7 +37,7 @@ var ExitStatus = ""
 const (
 	splashDelay      = 1 * time.Second
 	clusterRefresh   = 15 * time.Second
-	clusterInfoWidth = 50
+	clusterInfoWidth = 55
 	clusterInfoPad   = 15
 )
 
