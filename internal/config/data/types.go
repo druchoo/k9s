@@ -6,8 +6,12 @@ package data
 import (
 	"os"
 
+	"github.com/derailed/k9s/internal/config/json"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
+
+// JSONValidator validate yaml configurations.
+var JSONValidator = json.NewValidator()
 
 const (
 	// DefaultDirMod default unix perms for k9s directory.
@@ -28,10 +32,10 @@ type KubeSettings interface {
 	// CurrentClusterName returns the name of the current cluster.
 	CurrentClusterName() (string, error)
 
-	// CurrentNamespace returns the name of the current namespace.
+	// CurrentNamespaceName returns the name of the current namespace.
 	CurrentNamespaceName() (string, error)
 
-	// ContextNames() returns all available context names.
+	// ContextNames returns all available context names.
 	ContextNames() (map[string]struct{}, error)
 
 	// CurrentContext returns the current context configuration.

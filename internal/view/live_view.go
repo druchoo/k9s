@@ -161,6 +161,23 @@ func (v *LiveView) bindKeys() {
 			ui.KeyM: ui.NewKeyAction("Toggle ManagedFields", v.toggleManagedCmd, true),
 		})
 	}
+	if v.model != nil && v.model.GVR().IsDecodable() {
+		v.actions.Add(ui.KeyActions{
+			ui.KeyT: ui.NewKeyAction("Toggle Encoded / Decoded", v.toggleEncodedDecodedCmd, true),
+		})
+	}
+}
+
+func (v *LiveView) toggleEncodedDecodedCmd(evt *tcell.EventKey) *tcell.EventKey {
+	m, ok := v.model.(model.EncDecResourceViewer)
+
+	if !ok {
+		return evt
+	}
+
+	m.Toggle()
+	v.Start()
+	return nil
 }
 
 func (v *LiveView) editCmd(evt *tcell.EventKey) *tcell.EventKey {
@@ -357,7 +374,7 @@ func (v *LiveView) resetCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 func (v *LiveView) saveCmd(evt *tcell.EventKey) *tcell.EventKey {
 	name := fmt.Sprintf("%s--%s", strings.Replace(v.model.GetPath(), "/", "-", 1), strings.ToLower(v.title))
-	if _, err := saveYAML(v.app.Config.K9s.ActiveScreenDumpsDir(), name, sanitizeEsc(v.text.GetText(true))); err != nil {
+	if _, err := saveYAML(v.app.Config.K9s.ContextScreenDumpDir(), name, sanitizeEsc(v.text.GetText(true))); err != nil {
 		v.app.Flash().Err(err)
 	} else {
 		v.app.Flash().Infof("File %q saved successfully!", name)

@@ -5,9 +5,11 @@ package data
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/derailed/k9s/internal/config/json"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -60,9 +62,13 @@ func (d *Dir) loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := JSONValidator.Validate(json.ContextSchema, bb); err != nil {
+		return nil, fmt.Errorf("validation failed for %q: %w", path, err)
+	}
+
 	var cfg Config
 	if err := yaml.Unmarshal(bb, &cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("context-config yaml load failed: %w\n%s", err, string(bb))
 	}
 
 	return &cfg, nil

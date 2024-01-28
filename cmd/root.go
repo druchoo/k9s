@@ -4,11 +4,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/derailed/k9s/internal/config/data"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/color"
@@ -44,10 +47,18 @@ var (
 	out = colorable.NewColorableStdout()
 )
 
+type flagError struct{ err error }
+
+func (e flagError) Error() string { return e.err.Error() }
+
 func init() {
 	if err := config.InitLogLoc(); err != nil {
 		fmt.Printf("Fail to init k9s logs location %s\n", err)
 	}
+
+	rootCmd.SetFlagErrorFunc(func(command *cobra.Command, err error) error {
+		return flagError{err: err}
+	})
 
 	rootCmd.AddCommand(versionCmd(), infoCmd())
 	initK9sFlags()
@@ -57,7 +68,9 @@ func init() {
 // Execute root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		panic(err)
+		if !errors.As(err, &flagError{}) {
+			panic(err)
+		}
 	}
 }
 
@@ -93,7 +106,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	cfg, err := loadConfiguration()
 	if err != nil {
-		log.Error().Err(err).Msgf("load configuration failed")
+		log.Error().Err(err).Msgf("Fail to load global/context configuration")
 	}
 	app := view.NewApp(cfg)
 	if err := app.Init(version, *k9sFlags.RefreshRate); err != nil {
@@ -114,33 +127,36 @@ func loadConfiguration() (*config.Config, error) {
 
 	k8sCfg := client.NewConfig(k8sFlags)
 	k9sCfg := config.NewConfig(k8sCfg)
-	if err := k9sCfg.Load(config.AppConfigFile); err != nil {
-		log.Warn().Msg("Unable to locate K9s config. Generating new configuration...")
-	}
-	k9sCfg.K9s.Override(k9sFlags)
-	if err := k9sCfg.Refine(k8sFlags, k9sFlags, k8sCfg); err != nil {
-		log.Error().Err(err).Msgf("refine failed")
-	}
+	var errs error
 	conn, err := client.InitConnection(k8sCfg)
 	k9sCfg.SetConnection(conn)
 	if err != nil {
-		return k9sCfg, err
+		errs = errors.Join(errs, err)
+	}
+
+	if err := k9sCfg.Load(config.AppConfigFile); err != nil {
+		errs = errors.Join(errs, err)
+	}
+	k9sCfg.K9s.Override(k9sFlags)
+	if err := k9sCfg.Refine(k8sFlags, k9sFlags, k8sCfg); err != nil {
+		log.Error().Err(err).Msgf("config refine failed")
+		errs = errors.Join(errs, err)
 	}
 	// Try to access server version if that fail. Connectivity issue?
 	if !conn.CheckConnectivity() {
-		return nil, fmt.Errorf("cannot connect to context: %s", k9sCfg.K9s.ActiveContextName())
+		errs = errors.Join(errs, fmt.Errorf("cannot connect to context: %s", k9sCfg.K9s.ActiveContextName()))
 	}
 	if !conn.ConnectionOK() {
-		return nil, fmt.Errorf("k8s connection failed for context: %s", k9sCfg.K9s.ActiveContextName())
+		errs = errors.Join(errs, fmt.Errorf("k8s connection failed for context: %s", k9sCfg.K9s.ActiveContextName()))
 	}
 
 	log.Info().Msg("✅ Kubernetes connectivity")
 	if err := k9sCfg.Save(); err != nil {
 		log.Error().Err(err).Msg("Config save")
-		return nil, err
+		errs = errors.Join(errs, err)
 	}
 
-	return k9sCfg, nil
+	return k9sCfg, errs
 }
 
 func parseLevel(level string) zerolog.Level {
@@ -279,6 +295,7 @@ func initK8sFlags() {
 
 	initAsFlags()
 	initCertFlags()
+	initK8sFlagCompletion()
 }
 
 func initAsFlags() {
@@ -332,4 +349,57 @@ func initCertFlags() {
 		"",
 		"Bearer token for authentication to the API server",
 	)
+}
+
+type (
+	k8sPickerFn[T any] func(cfg *api.Config) map[string]T
+	completeFn         func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
+)
+
+func initK8sFlagCompletion() {
+	_ = rootCmd.RegisterFlagCompletionFunc("context", k8sFlagCompletion(func(cfg *api.Config) map[string]*api.Context {
+		return cfg.Contexts
+	}))
+
+	_ = rootCmd.RegisterFlagCompletionFunc("cluster", k8sFlagCompletion(func(cfg *api.Config) map[string]*api.Cluster {
+		return cfg.Clusters
+	}))
+
+	_ = rootCmd.RegisterFlagCompletionFunc("user", k8sFlagCompletion(func(cfg *api.Config) map[string]*api.AuthInfo {
+		return cfg.AuthInfos
+	}))
+
+	_ = rootCmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, s string) ([]string, cobra.ShellCompDirective) {
+		conn := client.NewConfig(k8sFlags)
+		if c, err := client.InitConnection(conn); err == nil {
+			if nss, err := c.ValidNamespaceNames(); err == nil {
+				return filterFlagCompletions(nss, s)
+			}
+		}
+
+		return nil, cobra.ShellCompDirectiveError
+	})
+}
+
+func k8sFlagCompletion[T any](picker k8sPickerFn[T]) completeFn {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		conn := client.NewConfig(k8sFlags)
+		cfg, err := conn.RawConfig()
+		if err != nil {
+			log.Error().Err(err).Msgf("k8s config getter failed")
+		}
+
+		return filterFlagCompletions(picker(&cfg), toComplete)
+	}
+}
+
+func filterFlagCompletions[T any](m map[string]T, s string) ([]string, cobra.ShellCompDirective) {
+	cc := make([]string, 0, len(m))
+	for name := range m {
+		if strings.HasPrefix(name, s) {
+			cc = append(cc, name)
+		}
+	}
+
+	return cc, cobra.ShellCompDirectiveNoFileComp
 }
