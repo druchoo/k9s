@@ -48,7 +48,7 @@ type Workload struct {
 func (w *Workload) Delete(ctx context.Context, path string, propagation *metav1.DeletionPropagation, grace Grace) error {
 	gvr, _ := ctx.Value(internal.KeyGVR).(client.GVR)
 	ns, n := client.Namespaced(path)
-	auth, err := w.Client().CanI(ns, gvr.String(), []string{client.DeleteVerb})
+	auth, err := w.Client().CanI(ns, gvr.String(), n, []string{client.DeleteVerb})
 	if err != nil {
 		return err
 	}
@@ -122,12 +122,14 @@ func (a *Workload) List(ctx context.Context, ns string) ([]runtime.Object, error
 					ts = m.CreationTimestamp
 				}
 			}
+			stat := status(gvr, r, table.ColumnDefinitions)
 			oo = append(oo, &render.WorkloadRes{Row: metav1.TableRow{Cells: []interface{}{
 				gvr.String(),
 				ns,
 				r.Cells[indexOf("Name", table.ColumnDefinitions)],
-				diagnose(gvr, r, table.ColumnDefinitions),
-				status(gvr, r, table.ColumnDefinitions),
+				stat,
+				readiness(gvr, r, table.ColumnDefinitions),
+				validity(stat),
 				ts,
 			}}})
 		}
@@ -138,7 +140,7 @@ func (a *Workload) List(ctx context.Context, ns string) ([]runtime.Object, error
 
 // Helpers...
 
-func status(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinition) string {
+func readiness(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinition) string {
 	switch gvr {
 	case PodGVR, DpGVR, StsGVR:
 		return r.Cells[indexOf("Ready", h)].(string)
@@ -153,7 +155,7 @@ func status(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinition)
 	return render.NAValue
 }
 
-func diagnose(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinition) string {
+func status(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinition) string {
 	switch gvr {
 	case PodGVR:
 		if !isReady(r.Cells[indexOf("Ready", h)].(string)) || r.Cells[indexOf("Status", h)] != render.PhaseRunning {
@@ -185,6 +187,14 @@ func diagnose(gvr client.GVR, r metav1.TableRow, h []metav1.TableColumnDefinitio
 	}
 
 	return StatusOK
+}
+
+func validity(status string) string {
+	if status != "DEGRADED" {
+		return ""
+	}
+
+	return status
 }
 
 func isReady(s string) bool {

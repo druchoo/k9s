@@ -4,6 +4,7 @@ plugins:
   debug:
     shortCut: Shift-D
     description: Add debug container
+    dangerous: true
     scopes:
       - containers
     command: bash
@@ -11,4 +12,4 @@ plugins:
     confirm: true
     args:
       - -c
-      - "kubectl debug -it -n=$NAMESPACE $POD --target=$NAME --image=nicolaka/netshoot:v0.11 --share-processes -- bash"
+      - "kubectl debug -it --context $CONTEXT -n=$NAMESPACE $POD --target=$NAME --image=nicolaka/netshoot:v0.12 --share-processes -- bash"

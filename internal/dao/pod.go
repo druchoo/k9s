@@ -37,24 +37,13 @@ var (
 )
 
 const (
-	logRetryCount              = 20
-	logRetryWait               = 1 * time.Second
-	defaultContainerAnnotation = "kubectl.kubernetes.io/default-container"
+	logRetryCount = 20
+	logRetryWait  = 1 * time.Second
 )
 
 // Pod represents a pod resource.
 type Pod struct {
 	Resource
-}
-
-// IsHappy check for happy deployments.
-func (p *Pod) IsHappy(po v1.Pod) bool {
-	for _, c := range po.Status.Conditions {
-		if c.Status == v1.ConditionFalse {
-			return false
-		}
-	}
-	return true
 }
 
 // Get returns a resource instance if found, else an error.
@@ -131,8 +120,8 @@ func (p *Pod) List(ctx context.Context, ns string) ([]runtime.Object, error) {
 
 // Logs fetch container logs for a given pod and container.
 func (p *Pod) Logs(path string, opts *v1.PodLogOptions) (*restclient.Request, error) {
-	ns, _ := client.Namespaced(path)
-	auth, err := p.Client().CanI(ns, "v1/pods:log", []string{client.GetVerb})
+	ns, n := client.Namespaced(path)
+	auth, err := p.Client().CanI(ns, "v1/pods:log", n, client.GetAccess)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +129,6 @@ func (p *Pod) Logs(path string, opts *v1.PodLogOptions) (*restclient.Request, er
 		return nil, fmt.Errorf("user is not authorized to view pod logs")
 	}
 
-	ns, n := client.Namespaced(path)
 	dial, err := p.Client().DialLogs()
 	if err != nil {
 		return nil, err
@@ -219,19 +207,19 @@ func (p *Pod) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan, error)
 		return append(outs, tailLogs(ctx, p, opts)), nil
 	}
 	for _, co := range po.Spec.InitContainers {
-		o := opts.Clone()
-		o.Container = co.Name
-		outs = append(outs, tailLogs(ctx, p, o))
+		cfg := opts.Clone()
+		cfg.Container = co.Name
+		outs = append(outs, tailLogs(ctx, p, cfg))
 	}
 	for _, co := range po.Spec.Containers {
-		o := opts.Clone()
-		o.Container = co.Name
-		outs = append(outs, tailLogs(ctx, p, o))
+		cfg := opts.Clone()
+		cfg.Container = co.Name
+		outs = append(outs, tailLogs(ctx, p, cfg))
 	}
 	for _, co := range po.Spec.EphemeralContainers {
-		o := opts.Clone()
-		o.Container = co.Name
-		outs = append(outs, tailLogs(ctx, p, o))
+		cfg := opts.Clone()
+		cfg.Container = co.Name
+		outs = append(outs, tailLogs(ctx, p, cfg))
 	}
 
 	return outs, nil
@@ -425,24 +413,6 @@ func MetaFQN(m metav1.ObjectMeta) string {
 	return FQN(m.Namespace, m.Name)
 }
 
-// FQN returns a fully qualified resource name.
-func FQN(ns, n string) string {
-	if ns == "" {
-		return n
-	}
-	return ns + "/" + n
-}
-
-func extractFQN(o runtime.Object) string {
-	u, ok := o.(*unstructured.Unstructured)
-	if !ok {
-		log.Error().Err(fmt.Errorf("expecting unstructured but got %T", o))
-		return client.NA
-	}
-
-	return FQN(u.GetNamespace(), u.GetName())
-}
-
 // GetPodSpec returns a pod spec given a resource.
 func (p *Pod) GetPodSpec(path string) (*v1.PodSpec, error) {
 	pod, err := p.GetInstance(path)
@@ -456,7 +426,7 @@ func (p *Pod) GetPodSpec(path string) (*v1.PodSpec, error) {
 // SetImages sets container images.
 func (p *Pod) SetImages(ctx context.Context, path string, imageSpecs ImageSpecs) error {
 	ns, n := client.Namespaced(path)
-	auth, err := p.Client().CanI(ns, "v1/pod", []string{client.PatchVerb})
+	auth, err := p.Client().CanI(ns, "v1/pod", n, client.PatchAccess)
 	if err != nil {
 		return err
 	}
@@ -498,21 +468,6 @@ func (p *Pod) isControlled(path string) (string, bool, error) {
 		return fmt.Sprintf("%s/%s", references[0].Kind, references[0].Name), true, nil
 	}
 	return "", false, nil
-}
-
-// GetDefaultContainer returns a container name if specified in an annotation.
-func GetDefaultContainer(m metav1.ObjectMeta, spec v1.PodSpec) (string, bool) {
-	defaultContainer, ok := m.Annotations[defaultContainerAnnotation]
-	if ok {
-		for _, container := range spec.Containers {
-			if container.Name == defaultContainer {
-				return defaultContainer, true
-			}
-		}
-		log.Warn().Msg(defaultContainer + " container  not found. " + defaultContainerAnnotation + " annotation will be ignored")
-	}
-
-	return "", false
 }
 
 func (p *Pod) Sanitize(ctx context.Context, ns string) (int, error) {

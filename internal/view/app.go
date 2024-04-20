@@ -111,10 +111,6 @@ func (a *App) Init(version string, rate int) error {
 	ns := a.Config.ActiveNamespace()
 
 	a.factory = watch.NewFactory(a.Conn())
-	ok, err := a.isValidNS(ns)
-	if !ok && err == nil {
-		return fmt.Errorf("app-init - invalid namespace: %q", ns)
-	}
 	a.initFactory(ns)
 
 	a.clusterModel = model.NewClusterInfo(a.factory, a.version, a.Config.K9s)
@@ -243,14 +239,14 @@ func (a *App) keyboard(evt *tcell.EventKey) *tcell.EventKey {
 }
 
 func (a *App) bindKeys() {
-	a.AddActions(ui.KeyActions{
+	a.AddActions(ui.NewKeyActionsFromMap(ui.KeyMap{
 		ui.KeyShift9:   ui.NewSharedKeyAction("DumpGOR", a.dumpGOR, false),
 		tcell.KeyCtrlE: ui.NewSharedKeyAction("ToggleHeader", a.toggleHeaderCmd, false),
 		tcell.KeyCtrlG: ui.NewSharedKeyAction("toggleCrumbs", a.toggleCrumbsCmd, false),
 		ui.KeyHelp:     ui.NewSharedKeyAction("Help", a.helpCmd, false),
 		tcell.KeyCtrlA: ui.NewSharedKeyAction("Aliases", a.aliasCmd, false),
 		tcell.KeyEnter: ui.NewKeyAction("Goto", a.gotoCmd, false),
-	})
+	}))
 }
 
 func (a *App) dumpGOR(evt *tcell.EventKey) *tcell.EventKey {
@@ -434,23 +430,8 @@ func (a *App) switchNS(ns string) error {
 	if err := a.Config.SetActiveNamespace(ns); err != nil {
 		return err
 	}
-	if err := a.Config.Save(); err != nil {
-		return err
-	}
 
 	return a.factory.SetActiveNS(ns)
-}
-
-func (a *App) isValidNS(ns string) (bool, error) {
-	if ns == client.BlankNamespace || ns == client.NamespaceAll {
-		return true, nil
-	}
-
-	if !a.Conn().IsValidNamespace(ns) {
-		return false, fmt.Errorf("invalid namespace: %q", ns)
-	}
-
-	return true, nil
 }
 
 func (a *App) switchContext(ci *cmd.Interpreter, force bool) error {
@@ -480,14 +461,17 @@ func (a *App) switchContext(ci *cmd.Interpreter, force bool) error {
 		}
 		ns := a.Config.ActiveNamespace()
 		if !a.Conn().IsValidNamespace(ns) {
-			a.Flash().Errf("Unable to validate namespace %q. Using %q namespace", ns, client.DefaultNamespace)
-			ns = client.DefaultNamespace
+			log.Warn().Msgf("Unable to validate namespace: %q. Using %q as active namespace", ns, ns)
 			if err := a.Config.SetActiveNamespace(ns); err != nil {
 				return err
 			}
 		}
-		if err := a.Config.Save(); err != nil {
+		a.Flash().Infof("Using %q namespace", ns)
+
+		if err := a.Config.Save(true); err != nil {
 			log.Error().Err(err).Msg("config save failed!")
+		} else {
+			log.Debug().Msgf("Saved context config for: %q", name)
 		}
 		a.initFactory(ns)
 		if err := a.command.Reset(a.Config.ContextAliasesPath(), true); err != nil {
@@ -516,6 +500,10 @@ func (a *App) BailOut() {
 			log.Error().Msgf("Bailing out %v", err)
 		}
 	}()
+
+	if err := a.Config.Save(true); err != nil {
+		log.Error().Err(err).Msg("config save failed!")
+	}
 
 	if err := nukeK9sShell(a); err != nil {
 		log.Error().Err(err).Msgf("nuking k9s shell pod")
@@ -718,7 +706,6 @@ func (a *App) inject(c model.Component, clearStack bool) error {
 	if clearStack {
 		a.Content.Stack.Clear()
 	}
-
 	a.Content.Push(c)
 
 	return nil

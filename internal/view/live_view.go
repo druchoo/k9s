@@ -31,7 +31,7 @@ type LiveView struct {
 	title                     string
 	model                     model.ResourceViewer
 	text                      *tview.TextView
-	actions                   ui.KeyActions
+	actions                   *ui.KeyActions
 	app                       *App
 	cmdBuff                   *model.FishBuff
 	currentRegion, maxRegions int
@@ -48,7 +48,7 @@ func NewLiveView(app *App, title string, m model.ResourceViewer) *LiveView {
 		text:          tview.NewTextView(),
 		app:           app,
 		title:         title,
-		actions:       make(ui.KeyActions),
+		actions:       ui.NewKeyActions(),
 		currentRegion: 0,
 		maxRegions:    0,
 		cmdBuff:       model.NewFishBuff('/', model.FilterBuffer),
@@ -78,6 +78,7 @@ func (v *LiveView) Init(_ context.Context) error {
 
 	v.app.Styles.AddListener(v)
 	v.StylesChanged(v.app.Styles)
+	v.setFullScreen(v.app.Config.K9s.UI.DefaultsToFullScreen)
 
 	v.app.Prompt().SetModel(v.cmdBuff)
 	v.cmdBuff.AddListener(v)
@@ -138,7 +139,7 @@ func (v *LiveView) BufferActive(state bool, k model.BufferKind) {
 }
 
 func (v *LiveView) bindKeys() {
-	v.actions.Set(ui.KeyActions{
+	v.actions.Bulk(ui.KeyMap{
 		tcell.KeyEnter:  ui.NewSharedKeyAction("Filter", v.filterCmd, false),
 		tcell.KeyEscape: ui.NewKeyAction("Back", v.resetCmd, false),
 		tcell.KeyCtrlS:  ui.NewKeyAction("Save", v.saveCmd, false),
@@ -152,19 +153,13 @@ func (v *LiveView) bindKeys() {
 	})
 
 	if !v.app.Config.K9s.IsReadOnly() {
-		v.actions.Add(ui.KeyActions{
-			ui.KeyE: ui.NewKeyAction("Edit", v.editCmd, true),
-		})
+		v.actions.Add(ui.KeyE, ui.NewKeyAction("Edit", v.editCmd, true))
 	}
 	if v.title == yamlAction {
-		v.actions.Add(ui.KeyActions{
-			ui.KeyM: ui.NewKeyAction("Toggle ManagedFields", v.toggleManagedCmd, true),
-		})
+		v.actions.Add(ui.KeyM, ui.NewKeyAction("Toggle ManagedFields", v.toggleManagedCmd, true))
 	}
 	if v.model != nil && v.model.GVR().IsDecodable() {
-		v.actions.Add(ui.KeyActions{
-			ui.KeyT: ui.NewKeyAction("Toggle Encoded / Decoded", v.toggleEncodedDecodedCmd, true),
-		})
+		v.actions.Add(ui.KeyX, ui.NewKeyAction("Toggle Decode", v.toggleEncodedDecodedCmd, true))
 	}
 }
 
@@ -209,7 +204,7 @@ func (v *LiveView) toggleRefreshCmd(evt *tcell.EventKey) *tcell.EventKey {
 }
 
 func (v *LiveView) keyboard(evt *tcell.EventKey) *tcell.EventKey {
-	if a, ok := v.actions[ui.AsKey(evt)]; ok {
+	if a, ok := v.actions.Get(ui.AsKey(evt)); ok {
 		return a.Action(evt)
 	}
 
@@ -224,7 +219,7 @@ func (v *LiveView) StylesChanged(s *config.Styles) {
 }
 
 // Actions returns menu actions.
-func (v *LiveView) Actions() ui.KeyActions {
+func (v *LiveView) Actions() *ui.KeyActions {
 	return v.actions
 }
 
@@ -286,16 +281,20 @@ func (v *LiveView) toggleFullScreenCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 
-	v.fullScreen = !v.fullScreen
-	v.SetFullScreen(v.fullScreen)
-	v.Box.SetBorder(!v.fullScreen)
-	if v.fullScreen {
+	v.setFullScreen(!v.fullScreen)
+
+	return nil
+}
+
+func (v *LiveView) setFullScreen(isFullScreen bool) {
+	v.fullScreen = isFullScreen
+	v.SetFullScreen(isFullScreen)
+	v.Box.SetBorder(!isFullScreen)
+	if isFullScreen {
 		v.Box.SetBorderPadding(0, 0, 0, 0)
 	} else {
 		v.Box.SetBorderPadding(0, 0, 1, 1)
 	}
-
-	return nil
 }
 
 func (v *LiveView) nextCmd(evt *tcell.EventKey) *tcell.EventKey {

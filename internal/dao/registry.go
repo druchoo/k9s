@@ -21,50 +21,24 @@ const (
 	crdCat  = "crd"
 	k9sCat  = "k9s"
 	helmCat = "helm"
+	crdGVR  = "apiextensions.k8s.io/v1/customresourcedefinitions"
 )
 
 // MetaAccess tracks resources metadata.
 var MetaAccess = NewMeta()
 
-var stdGroups = []string{
-	"admissionregistration.k8s.io/v1",
-	"admissionregistration.k8s.io/v1beta1",
-	"apiextensions.k8s.io/v1",
-	"apiextensions.k8s.io/v1beta1",
-	"apiregistration.k8s.io/v1",
-	"apiregistration.k8s.io/v1beta1",
-	"apps/v1",
-	"authentication.k8s.io/v1",
-	"authentication.k8s.io/v1beta1",
-	"authorization.k8s.io/v1",
-	"authorization.k8s.io/v1beta1",
-	"autoscaling/v1",
-	"autoscaling/v2beta1",
-	"autoscaling/v2beta2",
-	"batch/v1",
-	"batch/v1beta1",
-	"certificates.k8s.io/v1",
-	"certificates.k8s.io/v1beta1",
-	"coordination.k8s.io/v1",
-	"coordination.k8s.io/v1beta1",
-	"discovery.k8s.io/v1beta1",
-	"dynatrace.com/v1alpha1",
-	"events.k8s.io/v1",
-	"extensions/v1beta1",
-	"flowcontrol.apiserver.k8s.io/v1beta1",
-	"metrics.k8s.io/v1beta1",
-	"networking.k8s.io/v1",
-	"networking.k8s.io/v1beta1",
-	"node.k8s.io/v1",
-	"node.k8s.io/v1beta1",
-	"policy/v1beta1",
-	"rbac.authorization.k8s.io/v1",
-	"rbac.authorization.k8s.io/v1beta1",
-	"scheduling.k8s.io/v1",
-	"scheduling.k8s.io/v1beta1",
-	"storage.k8s.io/v1",
-	"storage.k8s.io/v1beta1",
-	"v1",
+var stdGroups = map[string]struct{}{
+	"apps/v1":             {},
+	"autoscaling/v1":      {},
+	"autoscaling/v2":      {},
+	"autoscaling/v2beta1": {},
+	"autoscaling/v2beta2": {},
+	"batch/v1":            {},
+	"batch/v1beta1":       {},
+	"extensions/v1beta1":  {},
+	"policy/v1beta1":      {},
+	"policy/v1":           {},
+	"v1":                  {},
 }
 
 func (m ResourceMetas) clear() {
@@ -89,28 +63,32 @@ func NewMeta() *Meta {
 // Customize here for non resource types or types with metrics or logs.
 func AccessorFor(f Factory, gvr client.GVR) (Accessor, error) {
 	m := Accessors{
-		client.NewGVR("workloads"):              &Workload{},
-		client.NewGVR("contexts"):               &Context{},
-		client.NewGVR("containers"):             &Container{},
-		client.NewGVR("scans"):                  &ImageScan{},
-		client.NewGVR("screendumps"):            &ScreenDump{},
-		client.NewGVR("benchmarks"):             &Benchmark{},
-		client.NewGVR("portforwards"):           &PortForward{},
-		client.NewGVR("v1/services"):            &Service{},
-		client.NewGVR("v1/pods"):                &Pod{},
-		client.NewGVR("v1/nodes"):               &Node{},
-		client.NewGVR("apps/v1/deployments"):    &Deployment{},
-		client.NewGVR("apps/v1/daemonsets"):     &DaemonSet{},
-		client.NewGVR("apps/v1/statefulsets"):   &StatefulSet{},
-		client.NewGVR("apps/v1/replicasets"):    &ReplicaSet{},
-		client.NewGVR("batch/v1/cronjobs"):      &CronJob{},
-		client.NewGVR("batch/v1beta1/cronjobs"): &CronJob{},
-		client.NewGVR("batch/v1/jobs"):          &Job{},
-		client.NewGVR("v1/namespaces"):          &Namespace{},
-		client.NewGVR("popeye"):                 &Popeye{},
-		client.NewGVR("helm"):                   &HelmChart{},
-		client.NewGVR("helm-history"):           &HelmHistory{},
-		client.NewGVR("dir"):                    &Dir{},
+		client.NewGVR("workloads"):                                         &Workload{},
+		client.NewGVR("contexts"):                                          &Context{},
+		client.NewGVR("containers"):                                        &Container{},
+		client.NewGVR("scans"):                                             &ImageScan{},
+		client.NewGVR("screendumps"):                                       &ScreenDump{},
+		client.NewGVR("benchmarks"):                                        &Benchmark{},
+		client.NewGVR("portforwards"):                                      &PortForward{},
+		client.NewGVR("dir"):                                               &Dir{},
+		client.NewGVR("v1/services"):                                       &Service{},
+		client.NewGVR("v1/pods"):                                           &Pod{},
+		client.NewGVR("v1/nodes"):                                          &Node{},
+		client.NewGVR("v1/namespaces"):                                     &Namespace{},
+		client.NewGVR("v1/configmaps"):                                     &ConfigMap{},
+		client.NewGVR("v1/secrets"):                                        &Secret{},
+		client.NewGVR("apps/v1/deployments"):                               &Deployment{},
+		client.NewGVR("apps/v1/daemonsets"):                                &DaemonSet{},
+		client.NewGVR("apps/v1/statefulsets"):                              &StatefulSet{},
+		client.NewGVR("apps/v1/replicasets"):                               &ReplicaSet{},
+		client.NewGVR("batch/v1/cronjobs"):                                 &CronJob{},
+		client.NewGVR("batch/v1beta1/cronjobs"):                            &CronJob{},
+		client.NewGVR("batch/v1/jobs"):                                     &Job{},
+		client.NewGVR("helm"):                                              &HelmChart{},
+		client.NewGVR("helm-history"):                                      &HelmHistory{},
+		client.NewGVR("apiextensions.k8s.io/v1/customresourcedefinitions"): &CustomResourceDefinition{},
+		// !!BOZO!! Popeye
+		//client.NewGVR("popeye"):                 &Popeye{},
 	}
 
 	r, ok := m[gvr]
@@ -319,8 +297,8 @@ func loadK9s(m ResourceMetas) {
 
 func loadHelm(m ResourceMetas) {
 	m[client.NewGVR("helm")] = metav1.APIResource{
-		Name:       "chart",
-		Kind:       "Chart",
+		Name:       "helm",
+		Kind:       "Helm",
 		Namespaced: true,
 		Verbs:      []string{"delete"},
 		Categories: []string{helmCat},
@@ -382,7 +360,7 @@ func loadPreferred(f Factory, m ResourceMetas) error {
 			if res.SingularName == "" {
 				res.SingularName = strings.ToLower(res.Kind)
 			}
-			if !isStandardGroup(res.Group) {
+			if !isStandardGroup(r.GroupVersion) {
 				res.Categories = append(res.Categories, crdCat)
 			}
 			m[gvr] = res
@@ -392,14 +370,12 @@ func loadPreferred(f Factory, m ResourceMetas) error {
 	return nil
 }
 
-func isStandardGroup(r string) bool {
-	for _, res := range stdGroups {
-		if strings.Index(res, r) == 0 {
-			return true
-		}
+func isStandardGroup(gv string) bool {
+	if _, ok := stdGroups[gv]; ok {
+		return true
 	}
 
-	return false
+	return strings.Contains(gv, "k8s.io")
 }
 
 var deprecatedGVRs = map[client.GVR]struct{}{
@@ -415,7 +391,6 @@ func loadCRDs(f Factory, m ResourceMetas) {
 	if f.Client() == nil || !f.Client().ConnectionOK() {
 		return
 	}
-	const crdGVR = "apiextensions.k8s.io/v1/customresourcedefinitions"
 	oo, err := f.List(crdGVR, client.ClusterScope, false, labels.Everything())
 	if err != nil {
 		log.Warn().Err(err).Msgf("Fail CRDs load")

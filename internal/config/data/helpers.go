@@ -4,9 +4,16 @@
 package data
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+)
+
+const (
+	envPFAddress          = "K9S_DEFAULT_PF_ADDRESS"
+	defaultPortFwdAddress = "localhost"
 )
 
 var invalidPathCharsRX = regexp.MustCompile(`[:/]+`)
@@ -19,6 +26,14 @@ func SanitizeContextSubpath(cluster, context string) string {
 // SanitizeFileName ensure file spec is valid.
 func SanitizeFileName(name string) string {
 	return invalidPathCharsRX.ReplaceAllString(name, "-")
+}
+
+func defaultPFAddress() string {
+	if a := os.Getenv(envPFAddress); a != "" {
+		return a
+	}
+
+	return defaultPortFwdAddress
 }
 
 // InList check if string is in a collection of strings.
@@ -38,7 +53,7 @@ func EnsureDirPath(path string, mod os.FileMode) error {
 
 // EnsureFullPath ensures a directory exist from the given path.
 func EnsureFullPath(path string, mod os.FileMode) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		if err = os.MkdirAll(path, mod); err != nil {
 			return err
 		}

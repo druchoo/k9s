@@ -28,7 +28,7 @@ type Details struct {
 	*tview.Flex
 
 	text                      *tview.TextView
-	actions                   ui.KeyActions
+	actions                   *ui.KeyActions
 	app                       *App
 	title, subject            string
 	cmdBuff                   *model.FishBuff
@@ -47,7 +47,7 @@ func NewDetails(app *App, title, subject, contentType string, searchable bool) *
 		app:         app,
 		title:       title,
 		subject:     subject,
-		actions:     make(ui.KeyActions),
+		actions:     ui.NewKeyActions(),
 		cmdBuff:     model.NewFishBuff('/', model.FilterBuffer),
 		model:       model.NewText(),
 		searchable:  searchable,
@@ -76,6 +76,7 @@ func (d *Details) Init(_ context.Context) error {
 
 	d.app.Styles.AddListener(d)
 	d.StylesChanged(d.app.Styles)
+	d.setFullScreen(d.app.Config.K9s.UI.DefaultsToFullScreen)
 
 	d.app.Prompt().SetModel(d.cmdBuff)
 	d.cmdBuff.AddListener(d)
@@ -131,7 +132,7 @@ func (d *Details) BufferActive(state bool, k model.BufferKind) {
 }
 
 func (d *Details) bindKeys() {
-	d.actions.Set(ui.KeyActions{
+	d.actions.Bulk(ui.KeyMap{
 		tcell.KeyEnter:  ui.NewSharedKeyAction("Filter", d.filterCmd, false),
 		tcell.KeyEscape: ui.NewKeyAction("Back", d.resetCmd, false),
 		tcell.KeyCtrlS:  ui.NewKeyAction("Save", d.saveCmd, false),
@@ -149,7 +150,7 @@ func (d *Details) bindKeys() {
 }
 
 func (d *Details) keyboard(evt *tcell.EventKey) *tcell.EventKey {
-	if a, ok := d.actions[ui.AsKey(evt)]; ok {
+	if a, ok := d.actions.Get(ui.AsKey(evt)); ok {
 		return a.Action(evt)
 	}
 
@@ -167,6 +168,7 @@ func (d *Details) StylesChanged(s *config.Styles) {
 // Update updates the view content.
 func (d *Details) Update(buff string) *Details {
 	d.model.SetText(buff)
+
 	return d
 }
 
@@ -180,7 +182,7 @@ func (d *Details) SetSubject(s string) {
 }
 
 // Actions returns menu actions.
-func (d *Details) Actions() ui.KeyActions {
+func (d *Details) Actions() *ui.KeyActions {
 	return d.actions
 }
 
@@ -226,16 +228,20 @@ func (d *Details) toggleFullScreenCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 
-	d.fullScreen = !d.fullScreen
-	d.SetFullScreen(d.fullScreen)
-	d.Box.SetBorder(!d.fullScreen)
-	if d.fullScreen {
+	d.setFullScreen(!d.fullScreen)
+
+	return nil
+}
+
+func (d *Details) setFullScreen(isFullScreen bool) {
+	d.fullScreen = isFullScreen
+	d.SetFullScreen(isFullScreen)
+	d.Box.SetBorder(!isFullScreen)
+	if isFullScreen {
 		d.Box.SetBorderPadding(0, 0, 0, 0)
 	} else {
 		d.Box.SetBorderPadding(0, 0, 1, 1)
 	}
-
-	return nil
 }
 
 func (d *Details) prevCmd(evt *tcell.EventKey) *tcell.EventKey {

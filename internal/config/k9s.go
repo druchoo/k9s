@@ -4,7 +4,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -67,7 +70,7 @@ func (k *K9s) resetConnection(conn client.Connection) {
 }
 
 // Save saves the k9s config to disk.
-func (k *K9s) Save() error {
+func (k *K9s) Save(force bool) error {
 	if k.getActiveConfig() == nil {
 		log.Warn().Msgf("Save failed. no active config detected")
 		return nil
@@ -77,8 +80,11 @@ func (k *K9s) Save() error {
 		data.SanitizeContextSubpath(k.activeConfig.Context.GetClusterName(), k.getActiveContextName()),
 		data.MainConfigFile,
 	)
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) || force {
+		return k.dir.Save(path, k.getActiveConfig())
+	}
 
-	return k.getActiveConfig().Save(path)
+	return nil
 }
 
 // Merge merges k9s configs.
@@ -157,7 +163,6 @@ func (k *K9s) ActiveContextName() string {
 
 // ActiveContext returns the currently active context.
 func (k *K9s) ActiveContext() (*data.Context, error) {
-
 	if cfg := k.getActiveConfig(); cfg != nil && cfg.Context != nil {
 		return cfg.Context, nil
 	}
@@ -305,7 +310,7 @@ func (k *K9s) IsReadOnly() bool {
 		ro = *cfg.Context.ReadOnly
 	}
 	if k.manualReadOnly != nil {
-		ro = true
+		ro = *k.manualReadOnly
 	}
 
 	return ro

@@ -32,9 +32,25 @@ func NewActiveNamespace(n string) *Namespace {
 	if n == client.BlankNamespace {
 		n = client.DefaultNamespace
 	}
+
 	return &Namespace{
 		Active:    n,
 		Favorites: []string{client.DefaultNamespace},
+	}
+}
+
+func (n *Namespace) merge(old *Namespace) {
+	n.mx.Lock()
+	defer n.mx.Unlock()
+
+	if n.LockFavorites {
+		return
+	}
+	for _, fav := range old.Favorites {
+		if InList(n.Favorites, fav) {
+			continue
+		}
+		n.Favorites = append(n.Favorites, fav)
 	}
 }
 

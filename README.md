@@ -79,7 +79,7 @@ Binaries for Linux, Windows and Mac are available as tarballs in the [release pa
 * Via [Homebrew](https://brew.sh/) for macOS or Linux
 
    ```shell
-   brew install k9s
+   brew install derailed/k9s/k9s
    ```
 
 * Via [MacPorts](https://www.macports.org)
@@ -385,16 +385,27 @@ K9s uses aliases to navigate most K8s resources.
     refreshRate: 2
     # Number of retries once the connection to the api-server is lost. Default 15.
     maxConnRetry: 5
-    # Enable mouse support. Default false
-    enableMouse: true
-    # Set to true to hide K9s header. Default false
-    headless: false
-    # Set to true to hide K9s crumbs. Default false
-    crumbsless: false
     # Indicates whether modification commands like delete/kill/edit are disabled. Default is false
     readOnly: false
     # Toggles whether k9s should exit when CTRL-C is pressed. When set to true, you will need to exist k9s via the :quit command. Default is false.
     noExitOnCtrlC: false
+    #UI settings
+    ui:
+      # Enable mouse support. Default false
+      enableMouse: false
+      # Set to true to hide K9s header. Default false
+      headless: false
+      # Set to true to hide the K9S logo Default false
+      logoless: false
+      # Set to true to hide K9s crumbs. Default false
+      crumbsless: false
+      noIcons: false
+      # Toggles reactive UI. This option provide for watching on disk artifacts changes and update the UI live Defaults to false.
+      reactive: false
+      # By default all contexts wil use the dracula skin unless explicitly overridden in the context config file.
+      skin: dracula # => assumes the file skins/dracula.yaml is present in the  $XDG_DATA_HOME/k9s/skins directory
+      # Allows to set certain views default fullscreen mode. (yaml, helm history, describe, value_extender, details, logs) Default false
+      defaultsToFullScreen: false
     # Toggles icons display as not all terminal support these chars.
     noIcons: false
     # Toggles whether k9s should check for the latest revision from the Github repository releases. Default is false.
@@ -409,8 +420,6 @@ K9s uses aliases to navigate most K8s resources.
       buffer: 500
       # Represents how far to go back in the log timeline in seconds. Setting to -1 will tail logs. Default is -1.
       sinceSeconds: 300 # => tail the last 5 mins.
-      # Go full screen while displaying logs. Default false
-      fullScreenLogs: false
       # Toggles log line wrap. Default false
       textWrap: false
       # Toggles log line timestamp info. Default false
@@ -523,9 +532,10 @@ In order to surface hotkeys globally please follow these steps:
           shortCut:    Shift-2
           description: Xray Deployments
           command:     xray deploy
-        # Hitting Ctrl-U view the resources in the namespace of your current selection
-        ctrl-u:
-          shortCut:    Ctrl-U
+        # Hitting Shift-S view the resources in the namespace of your current selection
+        shift-s:
+          shortCut:    Shift-S
+          override:    true # => will override the default shortcut related action if set to true (default to false)
           description: Namespaced resources
           command:     "$RESOURCE_NAME $NAMESPACE"
           keepHistory: true # whether you can return to the previous view
@@ -633,12 +643,14 @@ K9s allows you to extend your command line and tooling by defining your very own
 A plugin is defined as follows:
 
 * Shortcut option represents the key combination a user would type to activate the plugin
+* Override option make that the default action related to the shortcut will be overrided by the plugin
 * Confirm option (when enabled) lets you see the command that is going to be executed and gives you an option to confirm or prevent execution
 * Description will be printed next to the shortcut in the k9s menu
 * Scopes defines a collection of resources names/short-names for the views associated with the plugin. You can specify `all` to provide this shortcut for all views.
 * Command represents ad-hoc commands the plugin runs upon activation
 * Background specifies whether or not the command runs in the background
 * Args specifies the various arguments that should apply to the command above
+* OverwriteOutput options allows plugin developers to provide custom messages on plugin execution
 
 K9s does provide additional environment variables for you to customize your plugins arguments. Currently, the available environment variables are as follows:
 
@@ -669,6 +681,7 @@ plugins:
   # Defines a plugin to provide a `ctrl-l` shortcut to tail the logs while in pod view.
   fred:
     shortCut: Ctrl-L
+    override: false
     confirm: false
     description: Pod logs
     scopes:
@@ -912,6 +925,7 @@ k9s:
     reactive: false
     # By default all contexts wil use the dracula skin unless explicitly overridden in the context config file.
     skin: dracula # => assumes the file skins/dracula.yaml is present in the  $XDG_DATA_HOME/k9s/skins directory
+    defaultsToFullScreen: false
   skipLatestRevCheck: false
   disablePodCounting: false
   shellPod:
@@ -929,7 +943,6 @@ k9s:
     tail: 100
     buffer: 5000
     sinceSeconds: -1
-    fullScreen: false
     textWrap: false
     showTime: false
   thresholds:

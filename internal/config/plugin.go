@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,14 +27,17 @@ type Plugins struct {
 
 // Plugin describes a K9s plugin.
 type Plugin struct {
-	Scopes      []string `yaml:"scopes"`
-	Args        []string `yaml:"args"`
-	ShortCut    string   `yaml:"shortCut"`
-	Pipes       []string `yaml:"pipes"`
-	Description string   `yaml:"description"`
-	Command     string   `yaml:"command"`
-	Confirm     bool     `yaml:"confirm"`
-	Background  bool     `yaml:"background"`
+	Scopes          []string `yaml:"scopes"`
+	Args            []string `yaml:"args"`
+	ShortCut        string   `yaml:"shortCut"`
+	Override        bool     `yaml:"override"`
+	Pipes           []string `yaml:"pipes"`
+	Description     string   `yaml:"description"`
+	Command         string   `yaml:"command"`
+	Confirm         bool     `yaml:"confirm"`
+	Background      bool     `yaml:"background"`
+	Dangerous       bool     `yaml:"dangerous"`
+	OverwriteOutput bool     `yaml:"overwriteOutput"`
 }
 
 func (p Plugin) String() string {
@@ -93,7 +97,7 @@ func (p Plugins) loadPluginDir(dir string) error {
 }
 
 func (p *Plugins) load(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	bb, err := os.ReadFile(path)
